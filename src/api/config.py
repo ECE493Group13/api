@@ -25,3 +25,13 @@ class DatabaseConfig:
     SQLALCHEMY_DATABASE_URI = (
         f"postgresql+psycopg2://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
     )
+
+
+class MailConfig:
+    MAIL_SERVER = 'smtp.gmail.com'
+    MAIL_PORT = 465
+    MAIL_USERNAME = 'dataminingsystem@gmail.com'
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "test")
+    MAIL_USE_TLS = False
+    MAIL_USE_SSL = True
+    MAIL_DEBUG = True

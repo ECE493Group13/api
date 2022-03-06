@@ -29,7 +29,8 @@ class UserModel(db.Model):
     password = Column(Text, nullable=False)
     is_temp_password = Column(Boolean, nullable=False)
 
-    session = relationship("SessionModel", uselist=False, back_populates="user")
+    session = relationship("SessionModel", uselist=False,
+                           back_populates="user")
 
 
 class SessionModel(db.Model):
@@ -40,3 +41,12 @@ class SessionModel(db.Model):
 
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
     user = relationship("UserModel", uselist=False, back_populates="session")
+
+
+class RegisterModel(db.Model):
+    # __table_args__ = {"schema": "public"}
+    __tablename__ = "register"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(Text)
+    accepted = Column(Boolean, default=False)
