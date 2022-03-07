@@ -27,7 +27,7 @@ app.config["AUTH_EXCLUDE_ENDPOINTS"] = [
     "api-docs.openapi_redoc",
     "api-docs.openapi_json",
     "register.Register",
-    "register.AcceptRegister"
+    "register.AcceptRegister",
 ]
 
 db.init_app(app)

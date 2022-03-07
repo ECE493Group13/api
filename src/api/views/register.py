@@ -33,8 +33,7 @@ class Register(MethodView):
         username = args["username"]
 
         user: RegisterModel = (
-            db.session.query(RegisterModel).filter_by(
-                username=username).one_or_none()
+            db.session.query(RegisterModel).filter_by(username=username).one_or_none()
         )
 
         # User already requested an account
@@ -47,8 +46,7 @@ class Register(MethodView):
         db.session.commit()
 
         user: RegisterModel = (
-            db.session.query(RegisterModel).filter_by(
-                username=username).one_or_none()
+            db.session.query(RegisterModel).filter_by(username=username).one_or_none()
         )
 
         html = f'{username} is requesting an account: \
@@ -75,8 +73,7 @@ class AcceptRegister(MethodView):
         register_id = args["id"]
 
         user: RegisterModel = (
-            db.session.query(RegisterModel).filter_by(
-                id=register_id).one_or_none()
+            db.session.query(RegisterModel).filter_by(id=register_id).one_or_none()
         )
 
         # Request not found

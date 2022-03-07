@@ -29,8 +29,7 @@ class UserModel(db.Model):
     password = Column(Text, nullable=False)
     is_temp_password = Column(Boolean, nullable=False)
 
-    session = relationship("SessionModel", uselist=False,
-                           back_populates="user")
+    session = relationship("SessionModel", uselist=False, back_populates="user")
 
 
 class SessionModel(db.Model):

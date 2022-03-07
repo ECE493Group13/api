@@ -28,9 +28,9 @@ class DatabaseConfig:
 
 
 class MailConfig:
-    MAIL_SERVER = 'smtp.gmail.com'
+    MAIL_SERVER = "smtp.gmail.com"
     MAIL_PORT = 465
-    MAIL_USERNAME = 'dataminingsystem@gmail.com'
+    MAIL_USERNAME = "dataminingsystem@gmail.com"
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "test")
     MAIL_USE_TLS = False
     MAIL_USE_SSL = True
