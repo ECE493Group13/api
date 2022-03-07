@@ -35,3 +35,4 @@ class MailConfig:
     MAIL_USE_TLS = False
     MAIL_USE_SSL = True
     MAIL_DEBUG = True
+    MAIL_SUPPRESS_SEND = False

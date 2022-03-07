@@ -2,7 +2,7 @@ import argon2
 import pytest
 from flask.testing import FlaskClient
 
-from api import app
+from api import app, mail
 from api.authentication import auth
 from api.database import UserModel, db
 
@@ -12,6 +12,8 @@ def client():
     app.config.update({"TESTING": True})
     app.config.update({"SQLALCHEMY_DATABASE_URI": "sqlite://"})
 
+    app.config.update({"MAIL_SUPPRESS_SEND": True})
+    mail.init_app(app)
     test_client = app.test_client()
 
     with test_client.application.app_context():

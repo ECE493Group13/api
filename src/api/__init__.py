@@ -27,12 +27,15 @@ app.config["AUTH_EXCLUDE_ENDPOINTS"] = [
     "api-docs.openapi_redoc",
     "api-docs.openapi_json",
     "register.Register",
-    "register.AcceptRegister",
+    "register.AcceptRegister"
 ]
 
 db.init_app(app)
 auth.init_app(app)
 mail.init_app(app)
+
+with app.app_context():
+    db.create_all()
 
 CORS(app)
 
