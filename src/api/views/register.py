@@ -16,6 +16,7 @@ blueprint = Blueprint("register", "register", url_prefix="/register")
 
 
 class AcceptRegisterSchema(Schema):
+    accept_key = fields.Str(required=True)
     accept = fields.Boolean(required=True)
     id = fields.Integer(required=True)
 
@@ -28,32 +29,56 @@ class RegisterSchema(Schema):
 @blueprint.route("")
 class Register(MethodView):
     @blueprint.arguments(RegisterSchema, location="json")
-    @blueprint.response(HTTPStatus.OK)
+    @blueprint.response(HTTPStatus.NO_CONTENT)
     @blueprint.alt_response(HTTPStatus.CONFLICT)
     def post(self, args: dict[str, str]):
         email = args["email"]
         username = args["username"]
 
-        user: RegisterModel = (
+        register_user: RegisterModel = (
             db.session.query(RegisterModel).filter_by(email=email).one_or_none()
         )
 
         # User already requested an account
+        if register_user is not None:
+            abort(HTTPStatus.CONFLICT)
+
+        user: UserModel = (
+            db.session.query(UserModel).filter_by(email=email).one_or_none()
+        )
+
+        # User already has an account
         if user is not None:
             abort(HTTPStatus.CONFLICT)
 
-        user = RegisterModel(email=email, username=username, accepted=False)
+        alphabet = string.ascii_letters + string.digits
+        accept_key = "".join(secrets.choice(alphabet) for _ in range(20))
 
-        db.session.add(user)
+        register_user = RegisterModel(
+            email=email, username=username, accepted=False, accept_key=accept_key
+        )
+
+        db.session.add(register_user)
         db.session.commit()
 
-        user: RegisterModel = (
+        register_user: RegisterModel = (
             db.session.query(RegisterModel).filter_by(email=email).one_or_none()
         )
 
-        html = f'{email} is requesting an account: \
-            <a href="{request.base_url}/accept?accept=True&id={user.id}">Accept</a> \
-            <a href="{request.base_url}/accept?accept=False&id={user.id}">Reject</a>'
+        html = f"""{email} is requesting an account: \
+            <form method="POST" action="{request.base_url}/accept">
+                <input type="hidden" id="accept" name="accept" value=True>
+                <input type="hidden" id="id" name="id" value={register_user.id}>
+                <input type="hidden" id="accept_key" name="accept_key" value={accept_key}>
+                <button type="submit">Accept</button>
+            </form>
+            <form method="POST" action="{request.base_url}/accept">
+                <input type="hidden" id="accept" name="accept" value=False>
+                <input type="hidden" id="id" name="id" value={register_user.id}>
+                <input type="hidden" id="accept_key" name="accept_key" value={accept_key}>
+                <button type="submit">Decline</button>
+            </form>
+            """
         msg = Message(
             "Account Request for DMS",
             sender=MailConfig.MAIL_USERNAME,
@@ -61,18 +86,21 @@ class Register(MethodView):
             html=html,
         )
         mail.send(msg)
-        return HTTPStatus.OK
+        return HTTPStatus.NO_CONTENT
 
 
 @blueprint.route("/accept")
 class AcceptRegister(MethodView):
-    @blueprint.arguments(AcceptRegisterSchema, location="query")
-    @blueprint.response(HTTPStatus.OK)
+    @blueprint.arguments(AcceptRegisterSchema, location="form")
+    @blueprint.response(HTTPStatus.NO_CONTENT)
     @blueprint.alt_response(HTTPStatus.NOT_FOUND)
     @blueprint.alt_response(HTTPStatus.ALREADY_REPORTED)
-    def get(self, args: dict[int, bool]):
+    @blueprint.alt_response(HTTPStatus.UNAUTHORIZED)
+    def post(self, args: dict[bool, str, int]):
         accept = args["accept"]
+        accept_key = args["accept_key"]
         register_id = args["id"]
+        print(accept)
 
         user: RegisterModel = (
             db.session.query(RegisterModel).filter_by(id=register_id).one_or_none()
@@ -82,9 +110,12 @@ class AcceptRegister(MethodView):
         if user is None:
             abort(HTTPStatus.NOT_FOUND)
 
+        if user.accept_key != accept_key:
+            abort(HTTPStatus.UNAUTHORIZED)
+
         if accept:
             alphabet = string.ascii_letters + string.digits
-            password = "".join(secrets.choice(alphabet) for _ in range(8))
+            password = "".join(secrets.choice(alphabet) for _ in range(20))
             create_user = UserModel(
                 email=user.email,
                 username=user.username,
@@ -107,4 +138,4 @@ class AcceptRegister(MethodView):
             body=body,
         )
         mail.send(msg)
-        return HTTPStatus.OK
+        return HTTPStatus.NO_CONTENT
