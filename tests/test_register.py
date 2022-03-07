@@ -17,17 +17,20 @@ def user_request(client: FlaskClient) -> RegisterModel:
 
 class TestRegister:
     def test_request_account(self, client: FlaskClient):
-        response = client.post("/register", json={"username": "example@example.com"})
+        response = client.post(
+            "/register", json={"username": "example@example.com"})
         assert response.status_code == HTTPStatus.OK
 
     def test_request_duplicate_account(
         self, client: FlaskClient, user_request: RegisterModel
     ):
-        response = client.post("/register", json={"username": "example@example.com"})
+        response = client.post(
+            "/register", json={"username": "example@example.com"})
         assert response.status_code == HTTPStatus.CONFLICT
 
     def test_accept_request(self, client: FlaskClient, user_request: RegisterModel):
-        response = client.get(f"/register/accept?accept=True&id={user_request.id}")
+        response = client.get(
+            f"/register/accept?accept=True&id={user_request.id}")
         assert response.status_code == HTTPStatus.OK
 
     def test_accept_invalid(self, client: FlaskClient):
@@ -35,5 +38,6 @@ class TestRegister:
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_decline_request(self, client: FlaskClient, user_request: RegisterModel):
-        response = client.get(f"/register/accept?accept=False&id={user_request.id}")
+        response = client.get(
+            f"/register/accept?accept=False&id={user_request.id}")
         assert response.status_code == HTTPStatus.OK
