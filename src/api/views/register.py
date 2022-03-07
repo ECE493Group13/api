@@ -100,41 +100,40 @@ class AcceptRegister(MethodView):
         accept = args["accept"]
         accept_key = args["accept_key"]
         register_id = args["id"]
-        print(accept)
 
-        user: RegisterModel = (
+        register_user: RegisterModel = (
             db.session.query(RegisterModel).filter_by(id=register_id).one_or_none()
         )
 
         # Request not found
-        if user is None:
+        if register_user is None:
             abort(HTTPStatus.NOT_FOUND)
 
-        if user.accept_key != accept_key:
+        if register_user.accept_key != accept_key:
             abort(HTTPStatus.UNAUTHORIZED)
 
         if accept:
             alphabet = string.ascii_letters + string.digits
             password = "".join(secrets.choice(alphabet) for _ in range(20))
-            create_user = UserModel(
-                email=user.email,
-                username=user.username,
+            created_user = UserModel(
+                email=register_user.email,
+                username=register_user.username,
                 password=password,
                 is_temp_password=True,
             )
-            db.session.add(create_user)
+            db.session.add(created_user)
 
-        db.session.delete(user)
+        db.session.delete(register_user)
         db.session.commit()
 
         body = f"Your account request has been {'granted' if accept else 'denied'}.\n"
         if accept:
-            body += f"Username: {user.username}\nPassword: {password}"
+            body += f"Username: {register_user.username}\nPassword: {password}"
 
         msg = Message(
             f"Account Request for DMS {'Approved' if accept else 'Denied'}",
             sender=MailConfig.MAIL_USERNAME,
-            recipients=[user.email],
+            recipients=[register_user.email],
             body=body,
         )
         mail.send(msg)
