@@ -34,9 +34,6 @@ db.init_app(app)
 auth.init_app(app)
 mail.init_app(app)
 
-with app.app_context():
-    db.create_all()
-
 CORS(app)
 
 api = Api(app)

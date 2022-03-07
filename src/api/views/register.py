@@ -72,10 +72,11 @@ class AcceptRegister(MethodView):
     @blueprint.alt_response(HTTPStatus.ALREADY_REPORTED)
     def get(self, args: dict[int, bool]):
         accept = args["accept"]
-        id = args["id"]
+        register_id = args["id"]
 
         user: RegisterModel = (
-            db.session.query(RegisterModel).filter_by(id=id).one_or_none()
+            db.session.query(RegisterModel).filter_by(
+                id=register_id).one_or_none()
         )
 
         # Request not found
@@ -85,13 +86,13 @@ class AcceptRegister(MethodView):
         if accept:
             alphabet = string.ascii_letters + string.digits
             password = "".join(secrets.choice(alphabet) for _ in range(8))
-            createUser = UserModel(
+            create_user = UserModel(
                 email=user.username,
                 username=user.username,
                 password=password,
                 is_temp_password=True,
             )
-            db.session.add(createUser)
+            db.session.add(create_user)
 
         db.session.delete(user)
         db.session.commit()
