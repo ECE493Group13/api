@@ -43,9 +43,9 @@ class SessionModel(db.Model):
 
 
 class RegisterModel(db.Model):
-    # __table_args__ = {"schema": "public"}
     __tablename__ = "register"
 
     id = Column(Integer, primary_key=True)
+    email = Column(Text)
     username = Column(Text)
     accepted = Column(Boolean, default=False)

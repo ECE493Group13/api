@@ -21,6 +21,7 @@ class AcceptRegisterSchema(Schema):
 
 
 class RegisterSchema(Schema):
+    email = fields.Str(required=True)
     username = fields.Str(required=True)
 
 
@@ -30,26 +31,27 @@ class Register(MethodView):
     @blueprint.response(HTTPStatus.OK)
     @blueprint.alt_response(HTTPStatus.CONFLICT)
     def post(self, args: dict[str, str]):
+        email = args["email"]
         username = args["username"]
 
         user: RegisterModel = (
-            db.session.query(RegisterModel).filter_by(username=username).one_or_none()
+            db.session.query(RegisterModel).filter_by(email=email).one_or_none()
         )
 
         # User already requested an account
         if user is not None:
             abort(HTTPStatus.CONFLICT)
 
-        user = RegisterModel(username=username, accepted=False)
+        user = RegisterModel(email=email, username=username, accepted=False)
 
         db.session.add(user)
         db.session.commit()
 
         user: RegisterModel = (
-            db.session.query(RegisterModel).filter_by(username=username).one_or_none()
+            db.session.query(RegisterModel).filter_by(email=email).one_or_none()
         )
 
-        html = f'{username} is requesting an account: \
+        html = f'{email} is requesting an account: \
             <a href="{request.base_url}/accept?accept=True&id={user.id}">Accept</a> \
             <a href="{request.base_url}/accept?accept=False&id={user.id}">Reject</a>'
         msg = Message(
@@ -84,7 +86,7 @@ class AcceptRegister(MethodView):
             alphabet = string.ascii_letters + string.digits
             password = "".join(secrets.choice(alphabet) for _ in range(8))
             create_user = UserModel(
-                email=user.username,
+                email=user.email,
                 username=user.username,
                 password=password,
                 is_temp_password=True,
@@ -101,7 +103,7 @@ class AcceptRegister(MethodView):
         msg = Message(
             f"Account Request for DMS {'Approved' if accept else 'Denied'}",
             sender=MailConfig.MAIL_USERNAME,
-            recipients=[user.username],
+            recipients=[user.email],
             body=body,
         )
         mail.send(msg)
