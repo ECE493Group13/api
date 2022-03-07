@@ -9,7 +9,7 @@ from api.database import RegisterModel, db
 @pytest.fixture()
 def user_request(client: FlaskClient) -> RegisterModel:
     with client.application.app_context():
-        model = RegisterModel(username="example@example.com")
+        model = RegisterModel(email="example@example.com", username="example")
         db.session.add(model)
         db.session.commit()
         yield model
@@ -17,13 +17,17 @@ def user_request(client: FlaskClient) -> RegisterModel:
 
 class TestRegister:
     def test_request_account(self, client: FlaskClient):
-        response = client.post("/register", json={"username": "example@example.com"})
+        response = client.post(
+            "/register", json={"email": "example@example.com", "username": "example"}
+        )
         assert response.status_code == HTTPStatus.OK
 
     def test_request_duplicate_account(
         self, client: FlaskClient, user_request: RegisterModel
     ):
-        response = client.post("/register", json={"username": "example@example.com"})
+        response = client.post(
+            "/register", json={"email": "example@example.com", "username": "example"}
+        )
         assert response.status_code == HTTPStatus.CONFLICT
 
     def test_accept_request(self, client: FlaskClient, user_request: RegisterModel):
