@@ -2,6 +2,7 @@ import secrets
 import string
 from http import HTTPStatus
 
+import argon2
 from flask import request
 from flask.views import MethodView
 from flask_mail import Message
@@ -13,6 +14,8 @@ from api.database import RegisterModel, UserModel, db
 from api.mail import mail
 
 blueprint = Blueprint("register", "register", url_prefix="/register")
+
+ph = argon2.PasswordHasher()
 
 
 class AcceptRegisterSchema(Schema):
@@ -36,7 +39,11 @@ class Register(MethodView):
         username = args["username"]
 
         register_user: RegisterModel = (
-            db.session.query(RegisterModel).filter_by(email=email).one_or_none()
+            db.session.query(RegisterModel)
+            .filter(
+                (RegisterModel.email == email) | (RegisterModel.username == username)
+            )
+            .one_or_none()
         )
 
         # User already requested an account
@@ -44,7 +51,9 @@ class Register(MethodView):
             abort(HTTPStatus.CONFLICT)
 
         user: UserModel = (
-            db.session.query(UserModel).filter_by(email=email).one_or_none()
+            db.session.query(UserModel)
+            .filter((UserModel.email == email) | (UserModel.username == username))
+            .one_or_none()
         )
 
         # User already has an account
@@ -115,10 +124,11 @@ class AcceptRegister(MethodView):
         if accept:
             alphabet = string.ascii_letters + string.digits
             password = "".join(secrets.choice(alphabet) for _ in range(20))
+            password_hash = ph.hash(password)
             created_user = UserModel(
                 email=register_user.email,
                 username=register_user.username,
-                password=password,
+                password=password_hash,
                 is_temp_password=True,
             )
             db.session.add(created_user)
