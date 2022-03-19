@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import tqdm
-from tensorflow.keras import layers
 
 SEED = 42
 
@@ -14,16 +13,16 @@ class Word2Vec(tf.keras.Model):
         super(Word2Vec, self).__init__()
 
         # Create embedding layers
-        self.target_embedding = layers.Embedding(
+        self.target_embedding = tf.keras.layers.Embedding(
             vocab_size,
             embedding_dim,
             input_length=1,
             name="w2v_embedding",
         )
-        self.context_embedding = layers.Embedding(
+        self.context_embedding = tf.keras.layers.Embedding(
             vocab_size,
             embedding_dim,
-            input_length=hparams.num_neg_samples + 1,
+            input_length=hparams["num_neg_samples"] + 1,
         )
 
     def call(self, pair):
@@ -43,7 +42,9 @@ class Word2Vec(tf.keras.Model):
 
 
 def read_data(corpus_filename):
-    data: pd.DataFrame = pd.read_csv(corpus_filename, sep="\t")
+    data: pd.DataFrame = pd.read_csv(
+        corpus_filename, sep="\t", names=["ngram_lc", "ngram_count"]
+    )
 
     # Determine number of unique words and scale with ngram_count
     words = {}
@@ -70,7 +71,7 @@ def prepare_data(data, num_words):
         (tf.cast(data.values, tf.string)))
 
     # Create text vectorziation layer
-    vectorize_layer = layers.TextVectorization(
+    vectorize_layer = tf.keras.layers.TextVectorization(
         max_tokens=num_words,
         split="whitespace",
         output_mode="int",
@@ -91,7 +92,8 @@ def generate_training_data(sequences, num_words, hparams, seed):
 
     # Build the sampling table for `vocab_size` tokens.
     sampling_table = tf.keras.preprocessing.sequence.make_sampling_table(
-        num_words)
+        num_words, sampling_factor=hparams["subsample"]
+    )
 
     # Iterate over all sequences (sentences) in the dataset.
     for sequence in tqdm.tqdm(sequences):
@@ -101,7 +103,7 @@ def generate_training_data(sequences, num_words, hparams, seed):
             sequence,
             vocabulary_size=num_words,
             sampling_table=sampling_table,
-            window_size=hparams.window_size,
+            window_size=hparams["window_size"],
             negative_samples=0,
         )
 
@@ -118,7 +120,7 @@ def generate_training_data(sequences, num_words, hparams, seed):
             ) = tf.random.log_uniform_candidate_sampler(
                 true_classes=context_class,
                 num_true=1,
-                num_sampled=hparams.num_neg_samples,
+                num_sampled=hparams["num_neg_samples"],
                 unique=True,
                 range_max=num_words,
                 seed=seed,
@@ -133,7 +135,7 @@ def generate_training_data(sequences, num_words, hparams, seed):
             context = tf.concat(
                 [context_class, negative_sampling_candidates], 0)
             label = tf.constant(
-                [1] + [0] * hparams.num_neg_samples, dtype="int64")
+                [1] + [0] * hparams["num_neg_samples"], dtype="int64")
 
             # Append each element from the training example to global lists.
             targets.append(target_word)
@@ -145,8 +147,9 @@ def generate_training_data(sequences, num_words, hparams, seed):
     labels = np.array(labels)
     training_data = tf.data.Dataset.from_tensor_slices(
         ((targets, contexts), labels))
-    training_data = training_data.shuffle(
-        len(training_data)).batch(hparams.batch_size)
+    training_data = training_data.shuffle(len(training_data)).batch(
+        hparams["batch_size"]
+    )
     # training_data = training_data.cache().prefetch(
     #     buffer_size=tf.data.AUTOTUNE
     # )
@@ -159,15 +162,18 @@ def train(corpus_filename, embeddings_filename, hparams):
     training_data, targets, contexts, labels = generate_training_data(
         sequences, num_words, hparams, seed=SEED
     )
-    word2vec = Word2Vec(num_words, hparams.embedding_size, hparams)
+    word2vec = Word2Vec(num_words, hparams["embedding_size"], hparams)
+
+    optimizer = tf.keras.optimizers.Adam(
+        learning_rate=hparams["learning_rate"])
     word2vec.compile(
-        optimizer="adam",
+        optimizer=optimizer,
         loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
         metrics=["accuracy"],
         run_eagerly=True,
     )
 
-    word2vec.fit(training_data, epochs=hparams.epochs_to_train)
+    word2vec.fit(training_data, epochs=hparams["epochs_to_train"])
 
     weights = word2vec.get_layer("w2v_embedding").get_weights()[0]
     vocab = vectorize_layer.get_vocabulary()
@@ -179,7 +185,7 @@ def train(corpus_filename, embeddings_filename, hparams):
     for index, word in enumerate(vocab):
         if index == 0:
             out_kv.write(
-                f"{vectorize_layer.vocabulary_size() - 1} {hparams.embedding_size}\n"
+                f"{vectorize_layer.vocabulary_size() - 1} {hparams['embedding_size']}\n"
             )
             continue
         vec = weights[index]
@@ -189,3 +195,20 @@ def train(corpus_filename, embeddings_filename, hparams):
     # out_v.close()
     # out_m.close()
     out_kv.close()
+
+
+# if __name__ == "__main__":
+#     print("starting")
+#     hparams = {
+#         "embedding_size": 200,
+#         "epochs_to_train": 20,
+#         "learning_rate": 0.025,
+#         "num_neg_samples": 25,
+#         "batch_size": 500,
+#         "concurrent_steps": 12,
+#         "window_size": 5,
+#         "min_count": 1,
+#         "subsample": 1e-3,
+#     }
+
+#     train("", "embeddings.txt", hparams)
