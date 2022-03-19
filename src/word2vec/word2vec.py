@@ -153,15 +153,14 @@ def generate_training_data(sequences, num_words, hparams, seed):
     # training_data = training_data.cache().prefetch(
     #     buffer_size=tf.data.AUTOTUNE
     # )
-    return training_data, targets, contexts, labels
+    return training_data
 
 
 def train(corpus_filename, embeddings_filename, hparams):
     data, num_words = read_data(corpus_filename)
     sequences, vectorize_layer = prepare_data(data, num_words)
-    training_data, targets, contexts, labels = generate_training_data(
-        sequences, num_words, hparams, seed=SEED
-    )
+    training_data = generate_training_data(
+        sequences, num_words, hparams, seed=SEED)
     word2vec = Word2Vec(num_words, hparams["embedding_size"], hparams)
 
     optimizer = tf.keras.optimizers.Adam(
