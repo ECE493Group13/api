@@ -67,8 +67,7 @@ def read_data(corpus_filename):
 def prepare_data(data, num_words):
 
     # Convert to tensorflow object
-    ngrams_tf = tf.data.Dataset.from_tensor_slices(
-        (tf.cast(data.values, tf.string)))
+    ngrams_tf = tf.data.Dataset.from_tensor_slices((tf.cast(data.values, tf.string)))
 
     # Create text vectorziation layer
     vectorize_layer = tf.keras.layers.TextVectorization(
@@ -80,8 +79,7 @@ def prepare_data(data, num_words):
     vectorize_layer.adapt(ngrams_tf)
 
     text_vector_ds = (
-        ngrams_tf.batch(1024).prefetch(
-            tf.data.AUTOTUNE).map(vectorize_layer).unbatch()
+        ngrams_tf.batch(1024).prefetch(tf.data.AUTOTUNE).map(vectorize_layer).unbatch()
     )
     sequences = list(text_vector_ds.as_numpy_iterator())
     return sequences, vectorize_layer
@@ -132,10 +130,8 @@ def generate_training_data(sequences, num_words, hparams, seed):
                 negative_sampling_candidates, 1
             )
 
-            context = tf.concat(
-                [context_class, negative_sampling_candidates], 0)
-            label = tf.constant(
-                [1] + [0] * hparams["num_neg_samples"], dtype="int64")
+            context = tf.concat([context_class, negative_sampling_candidates], 0)
+            label = tf.constant([1] + [0] * hparams["num_neg_samples"], dtype="int64")
 
             # Append each element from the training example to global lists.
             targets.append(target_word)
@@ -145,8 +141,7 @@ def generate_training_data(sequences, num_words, hparams, seed):
     targets = np.array(targets)
     contexts = np.array(contexts)[:, :, 0]
     labels = np.array(labels)
-    training_data = tf.data.Dataset.from_tensor_slices(
-        ((targets, contexts), labels))
+    training_data = tf.data.Dataset.from_tensor_slices(((targets, contexts), labels))
     training_data = training_data.shuffle(len(training_data)).batch(
         hparams["batch_size"]
     )
@@ -159,12 +154,10 @@ def generate_training_data(sequences, num_words, hparams, seed):
 def train(corpus_filename, embeddings_filename, hparams):
     data, num_words = read_data(corpus_filename)
     sequences, vectorize_layer = prepare_data(data, num_words)
-    training_data = generate_training_data(
-        sequences, num_words, hparams, seed=SEED)
+    training_data = generate_training_data(sequences, num_words, hparams, seed=SEED)
     word2vec = Word2Vec(num_words, hparams["embedding_size"], hparams)
 
-    optimizer = tf.keras.optimizers.Adam(
-        learning_rate=hparams["learning_rate"])
+    optimizer = tf.keras.optimizers.Adam(learning_rate=hparams["learning_rate"])
     word2vec.compile(
         optimizer=optimizer,
         loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
