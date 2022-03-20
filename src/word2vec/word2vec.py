@@ -1,16 +1,20 @@
 import io
 
+import astroid
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 import tqdm
 
 SEED = 42
+MAX_INFERRED = 500
+
+astroid.context.InferenceContext.max_inferred = MAX_INFERRED
 
 
 class Word2Vec(tf.keras.Model):
     def __init__(self, vocab_size, embedding_dim, hparams):
-        super(Word2Vec, self).__init__()
+        super().__init__()
 
         # Create embedding layers
         self.target_embedding = tf.keras.layers.Embedding(
@@ -203,4 +207,4 @@ def train(corpus_filename, embeddings_filename, hparams):
 #         "subsample": 1e-3,
 #     }
 
-#     train("", "embeddings.txt", hparams)
+#     train("test.txt", "embeddings.txt", hparams)
