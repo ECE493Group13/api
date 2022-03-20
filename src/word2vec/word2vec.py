@@ -1,5 +1,3 @@
-import io
-
 import astroid
 import numpy as np
 import pandas as pd
@@ -142,10 +140,9 @@ def generate_training_data(sequences, num_words, hparams, seed):
             contexts.append(context)
             labels.append(label)
 
-    targets = np.array(targets)
-    contexts = np.array(contexts)[:, :, 0]
-    labels = np.array(labels)
-    training_data = tf.data.Dataset.from_tensor_slices(((targets, contexts), labels))
+    training_data = tf.data.Dataset.from_tensor_slices(
+        ((np.array(targets), np.array(contexts)[:, :, 0]), np.array(labels))
+    )
     training_data = training_data.shuffle(len(training_data)).batch(
         hparams["batch_size"]
     )
