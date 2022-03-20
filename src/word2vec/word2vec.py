@@ -1,3 +1,5 @@
+import io
+
 import astroid
 import numpy as np
 import pandas as pd
@@ -173,7 +175,8 @@ def train(corpus_filename, embeddings_filename, hparams):
         for index, word in enumerate(vocab):
             if index == 0:
                 out_kv.write(
-                    f"{vectorize_layer.vocabulary_size() - 1} {hparams['embedding_size']}\n"
+                    f"{vectorize_layer.vocabulary_size() - 1} "
+                    f"{hparams['embedding_size']}\n"
                 )
                 continue
             out_kv.write(f"{word} " + " ".join([str(x) for x in weights[index]]) + "\n")
