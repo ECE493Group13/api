@@ -87,7 +87,28 @@ def prepare_data(data, num_words):
     return sequences, vectorize_layer
 
 
-def generate_training_data(sequences, num_words, hparams, seed):
+def get_context(context_word, num_words, hparams):
+
+    context_class = tf.expand_dims(tf.constant([context_word], dtype="int64"), 1)
+    (negative_sampling_candidates, _, _,) = tf.random.log_uniform_candidate_sampler(
+        true_classes=context_class,
+        num_true=1,
+        num_sampled=hparams["num_neg_samples"],
+        unique=True,
+        range_max=num_words,
+        seed=SEED,
+        name="negative_sampling",
+    )
+
+    # Build context and label vectors (for one target word)
+    negative_sampling_candidates = tf.expand_dims(negative_sampling_candidates, 1)
+
+    context = tf.concat([context_class, negative_sampling_candidates], 0)
+    label = tf.constant([1] + [0] * hparams["num_neg_samples"], dtype="int64")
+    return context, label
+
+
+def generate_training_data(sequences, num_words, hparams):
     targets, contexts, labels = [], [], []
 
     # Build the sampling table for `vocab_size` tokens.
@@ -110,39 +131,17 @@ def generate_training_data(sequences, num_words, hparams, seed):
         # Iterate over each positive skip-gram pair to produce training examples
         # with a positive context word and negative samples.
         for target_word, context_word in positive_skip_grams:
-            context_class = tf.expand_dims(
-                tf.constant([context_word], dtype="int64"), 1
-            )
-            (
-                negative_sampling_candidates,
-                _,
-                _,
-            ) = tf.random.log_uniform_candidate_sampler(
-                true_classes=context_class,
-                num_true=1,
-                num_sampled=hparams["num_neg_samples"],
-                unique=True,
-                range_max=num_words,
-                seed=seed,
-                name="negative_sampling",
-            )
-
-            # Build context and label vectors (for one target word)
-            negative_sampling_candidates = tf.expand_dims(
-                negative_sampling_candidates, 1
-            )
-
-            context = tf.concat([context_class, negative_sampling_candidates], 0)
-            label = tf.constant([1] + [0] * hparams["num_neg_samples"], dtype="int64")
+            context, label = get_context(context_word, num_words, hparams)
 
             # Append each element from the training example to global lists.
             targets.append(target_word)
             contexts.append(context)
             labels.append(label)
 
-    training_data = tf.data.Dataset.from_tensor_slices(
-        ((np.array(targets), np.array(contexts)[:, :, 0]), np.array(labels))
-    )
+    targets = np.array(targets)
+    contexts = np.array(contexts)[:, :, 0]
+    labels = np.array(labels)
+    training_data = tf.data.Dataset.from_tensor_slices(((targets, contexts), labels))
     training_data = training_data.shuffle(len(training_data)).batch(
         hparams["batch_size"]
     )
@@ -153,7 +152,7 @@ def generate_training_data(sequences, num_words, hparams, seed):
 def train(corpus_filename, embeddings_filename, hparams):
     data, num_words = read_data(corpus_filename)
     sequences, vectorize_layer = prepare_data(data, num_words)
-    training_data = generate_training_data(sequences, num_words, hparams, seed=SEED)
+    training_data = generate_training_data(sequences, num_words, hparams)
     word2vec = Word2Vec(num_words, hparams["embedding_size"], hparams)
 
     word2vec.compile(
