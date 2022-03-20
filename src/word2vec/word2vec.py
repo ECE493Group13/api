@@ -1,5 +1,3 @@
-import io
-
 import astroid
 import numpy as np
 import pandas as pd
@@ -149,9 +147,7 @@ def generate_training_data(sequences, num_words, hparams, seed):
     training_data = training_data.shuffle(len(training_data)).batch(
         hparams["batch_size"]
     )
-    # training_data = training_data.cache().prefetch(
-    #     buffer_size=tf.data.AUTOTUNE
-    # )
+
     return training_data
 
 
@@ -161,9 +157,8 @@ def train(corpus_filename, embeddings_filename, hparams):
     training_data = generate_training_data(sequences, num_words, hparams, seed=SEED)
     word2vec = Word2Vec(num_words, hparams["embedding_size"], hparams)
 
-    optimizer = tf.keras.optimizers.Adam(learning_rate=hparams["learning_rate"])
     word2vec.compile(
-        optimizer=optimizer,
+        optimizer=tf.keras.optimizers.Adam(learning_rate=hparams["learning_rate"]),
         loss=tf.keras.losses.CategoricalCrossentropy(from_logits=True),
         metrics=["accuracy"],
         run_eagerly=True,
@@ -174,23 +169,14 @@ def train(corpus_filename, embeddings_filename, hparams):
     weights = word2vec.get_layer("w2v_embedding").get_weights()[0]
     vocab = vectorize_layer.get_vocabulary()
 
-    # out_v = io.open("vectors1.tsv", "w", encoding="utf-8")
-    # out_m = io.open("metadata1.tsv", "w", encoding="utf-8")
-    out_kv = io.open(embeddings_filename, "w", encoding="utf-8")
-
-    for index, word in enumerate(vocab):
-        if index == 0:
-            out_kv.write(
-                f"{vectorize_layer.vocabulary_size() - 1} {hparams['embedding_size']}\n"
-            )
-            continue
-        vec = weights[index]
-        # out_v.write("\t".join([str(x) for x in vec]) + "\n")
-        # out_m.write(word + "\n")
-        out_kv.write(f"{word} " + " ".join([str(x) for x in vec]) + "\n")
-    # out_v.close()
-    # out_m.close()
-    out_kv.close()
+    with open(embeddings_filename, "w", encoding="utf-8") as out_kv:
+        for index, word in enumerate(vocab):
+            if index == 0:
+                out_kv.write(
+                    f"{vectorize_layer.vocabulary_size() - 1} {hparams['embedding_size']}\n"
+                )
+                continue
+            out_kv.write(f"{word} " + " ".join([str(x) for x in weights[index]]) + "\n")
 
 
 # if __name__ == "__main__":
