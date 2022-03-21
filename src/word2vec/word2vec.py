@@ -43,10 +43,11 @@ class Word2Vec(tf.keras.Model):
         return dots
 
 
-def read_data(corpus_filename):
+def read_data(corpus_filename, hparams):
     data: pd.DataFrame = pd.read_csv(
         corpus_filename, sep="\t", names=["ngram_lc", "ngram_count"]
     )
+    data = data.drop(data[data.ngram_count <= hparams["min_count"]].index)
 
     # Determine number of unique words and scale with ngram_count
     words = {}
@@ -150,7 +151,7 @@ def generate_training_data(sequences, num_words, hparams):
 
 
 def train(corpus_filename, embeddings_filename, hparams):
-    data, num_words = read_data(corpus_filename)
+    data, num_words = read_data(corpus_filename, hparams)
     sequences, vectorize_layer = prepare_data(data, num_words)
     training_data = generate_training_data(sequences, num_words, hparams)
     word2vec = Word2Vec(num_words, hparams["embedding_size"], hparams)
