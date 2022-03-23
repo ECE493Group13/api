@@ -1,3 +1,8 @@
+"""
+The implmentation of Word2Vec was based on the following tutorial by
+TensorFlow: https://www.tensorflow.org/tutorials/text/word2vec and adapted
+to fit our use case
+"""
 import astroid
 import numpy as np
 import pandas as pd
@@ -11,6 +16,10 @@ astroid.context.InferenceContext.max_inferred = MAX_INFERRED
 
 
 class Word2Vec(tf.keras.Model):
+    """Implmentation of this class is taken from TensorFlow's Word2Vec tutorial.
+    https://www.tensorflow.org/tutorials/text/word2vec
+    """
+
     def __init__(self, vocab_size, embedding_dim, hparams):
         super().__init__()
 
@@ -68,7 +77,6 @@ def read_data(corpus_filename, hparams):
 
 
 def prepare_data(data, num_words):
-
     # Convert to tensorflow object
     ngrams_tf = tf.data.Dataset.from_tensor_slices((tf.cast(data.values, tf.string)))
 
@@ -89,7 +97,7 @@ def prepare_data(data, num_words):
 
 
 def get_context(context_word, num_words, hparams):
-
+    """Support function for the function generate_training_data()"""
     context_class = tf.expand_dims(tf.constant([context_word], dtype="int64"), 1)
     (negative_sampling_candidates, _, _,) = tf.random.log_uniform_candidate_sampler(
         true_classes=context_class,
@@ -110,9 +118,12 @@ def get_context(context_word, num_words, hparams):
 
 
 def generate_training_data(sequences, num_words, hparams):
+    """This function was taken from Tensorflow's Word2Vec tutorial and adapted
+    to fit our use case.
+    https://www.tensorflow.org/tutorials/text/word2vec"""
     targets, contexts, labels = [], [], []
 
-    # Build the sampling table for `vocab_size` tokens.
+    # Build the sampling table for `num_words` tokens.
     sampling_table = tf.keras.preprocessing.sequence.make_sampling_table(
         num_words, sampling_factor=hparams["subsample"]
     )
