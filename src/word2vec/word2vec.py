@@ -9,6 +9,8 @@ import pandas as pd
 import tensorflow as tf
 import tqdm
 
+from api.word2vec.stopwords import stopwords
+
 SEED = 42
 MAX_INFERRED = 500
 
@@ -58,6 +60,9 @@ def read_data(corpus_filename, hparams):
     )
     data = data.drop(data[data.ngram_count <= hparams["min_count"]].index)
 
+    data["ngram_lc"] = data["ngram_lc"].apply(
+        lambda x: " ".join([word for word in x.split() if word not in stopwords])
+    )
     # Determine number of unique words and scale with ngram_count
     words = {}
     for row in data.itertuples():
