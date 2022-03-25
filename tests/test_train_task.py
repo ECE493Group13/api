@@ -162,7 +162,8 @@ class TestTrainer:
             trainer.read_embeddings(db.session, task, Path(file.name))
         db.session.commit()
         assert task.model is not None
-        assert task.model.data == b"hello world"
+        assert task.model.data == b"2 1\nhello 0.1\nworld 0.2\n"
+        assert task.model.visualization is not None
 
     def test_tick(self, dataset: DatasetModel, hparams: dict):
         """

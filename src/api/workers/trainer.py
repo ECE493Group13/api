@@ -6,8 +6,11 @@ from tempfile import TemporaryDirectory
 from time import sleep
 from typing import TYPE_CHECKING
 
+import numpy as np
 import word2vec_wrapper
+from gensim.models import KeyedVectors
 from logzero import logger
+from sklearn.manifold import TSNE
 from sqlalchemy.orm.session import Session
 
 from api import app
@@ -57,12 +60,28 @@ def write_corpus(session: Session, dataset: DatasetModel, filename: Path):
 
 
 def read_embeddings(session: Session, task: TrainTaskModel, filename: Path):
+    visualization = generate_visualization(filename)
     with open(filename, "rb") as file:
-        model = TrainedModel(
-            data=file.read(),
-            task=task,
-        )
+        model = TrainedModel(data=file.read(), task=task, visualization=visualization)
         session.add(model)
+
+
+def generate_visualization(filename: Path):
+    word_vectors = KeyedVectors.load_word2vec_format(filename, binary=False)
+
+    vectors = np.array(word_vectors.vectors)
+    labels = np.array(word_vectors.index_to_key)
+
+    tsne = TSNE(n_components=2, random_state=0)
+
+    vectors = tsne.fit_transform(vectors)
+
+    x_points = [np.float64(vector[0]) for vector in vectors]
+    y_points = [np.float64(vector[1]) for vector in vectors]
+
+    data = {"labels": labels.tolist(), "x": x_points, "y": y_points}
+
+    return json.dumps(data)
 
 
 def run_task(session: Session, task: TrainTaskModel):
