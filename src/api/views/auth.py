@@ -93,3 +93,10 @@ class UpdatePassword(MethodView):
         db.session.commit()
         token = auth.refresh_session().token
         return {"token": token}
+
+
+@blueprint.route("/ping")
+class Ping(MethodView):
+    @blueprint.response(HTTPStatus.NO_CONTENT)
+    def post(self):
+        pass
