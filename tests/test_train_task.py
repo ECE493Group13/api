@@ -157,7 +157,7 @@ class TestTrainer:
         db.session.commit()
 
         with NamedTemporaryFile("wb") as file:
-            file.write(b"hello world")
+            file.write(b"2 1\nhello 0.1\nworld 0.2\n")
             file.flush()
             trainer.read_embeddings(db.session, task, Path(file.name))
         db.session.commit()
