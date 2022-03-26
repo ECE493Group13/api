@@ -13,6 +13,7 @@ from api.database import (
     DatasetPaperModel,
     FilterTaskModel,
     PaperModel,
+    TrainedModel,
     TrainTaskModel,
     UserModel,
     db,
@@ -157,12 +158,30 @@ class TestTrainer:
         db.session.commit()
 
         with NamedTemporaryFile("wb") as file:
-            file.write(b"2 1\nhello 0.1\nworld 0.2\n")
+            file.write(b"hello world")
             file.flush()
             trainer.read_embeddings(db.session, task, Path(file.name))
         db.session.commit()
         assert task.model is not None
-        assert task.model.data == b"2 1\nhello 0.1\nworld 0.2\n"
+        assert task.model.data == b"hello world"
+
+    def test_generate_visualization(self, dataset: DatasetModel, hparams: dict):
+        """
+        Should generate TSNe raw data for embeddings
+        """
+        task = TrainTaskModel(
+            hparams=json.dumps(hparams), user=dataset.task.user, dataset=dataset
+        )
+        db.session.add(task)
+        db.session.commit()
+
+        with NamedTemporaryFile("wb") as file:
+            file.write(b"2 1\nhello 0.1\nworld 0.2\n")
+            file.flush()
+            trainer.read_embeddings(db.session, task, Path(file.name))
+            trainer.generate_visualization(db.session, task, Path(file.name))
+        db.session.commit()
+        assert task.model is not None
         assert task.model.visualization is not None
 
     def test_tick(self, dataset: DatasetModel, hparams: dict):

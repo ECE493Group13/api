@@ -11,7 +11,7 @@ blueprint = Blueprint("visualize", "visualize", url_prefix="/visualize")
 
 
 class VisualizeSchema(Schema):
-    model_id = fields.Int(required=True)
+    train_task_id = fields.Int(required=True)
 
 
 @blueprint.route("")
@@ -20,13 +20,13 @@ class VisualizeTask(MethodView):
     @blueprint.response(HTTPStatus.OK)
     @blueprint.alt_response(HTTPStatus.NOT_FOUND)
     def get(self, args: dict[int]):
-        model_id: int = args.get("model_id")
+        train_task_id: int = args.get("train_task_id")
 
         train_task_model = (
             db.session.query(TrainTaskModel)
             .join(TrainedModel)
+            .filter(TrainTaskModel.id == train_task_id)
             .filter(TrainTaskModel.user_id == auth.user.id)
-            .filter(TrainedModel.id == model_id)
         ).one_or_none()
 
         if train_task_model is None:

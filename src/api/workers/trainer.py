@@ -60,13 +60,12 @@ def write_corpus(session: Session, dataset: DatasetModel, filename: Path):
 
 
 def read_embeddings(session: Session, task: TrainTaskModel, filename: Path):
-    visualization = generate_visualization(filename)
     with open(filename, "rb") as file:
-        model = TrainedModel(data=file.read(), task=task, visualization=visualization)
+        model = TrainedModel(data=file.read(), task=task)
         session.add(model)
 
 
-def generate_visualization(filename: Path):
+def generate_visualization(session: Session, task: TrainTaskModel, filename: Path):
     word_vectors = KeyedVectors.load_word2vec_format(filename, binary=False)
 
     vectors = np.array(word_vectors.vectors)
@@ -81,7 +80,16 @@ def generate_visualization(filename: Path):
 
     data = {"labels": labels.tolist(), "x": x_points, "y": y_points}
 
-    return json.dumps(data)
+    model: TrainedModel = (
+        session.query(TrainedModel).filter(TrainedModel.task == task).one_or_none()
+    )
+
+    if model is None:
+        print("No trained model found")
+        return
+
+    model.visualization = json.dumps(data)
+    session.commit()
 
 
 def run_task(session: Session, task: TrainTaskModel):
@@ -96,6 +104,7 @@ def run_task(session: Session, task: TrainTaskModel):
         word2vec_wrapper.train(corpus_filename, embeddings_filename, hparams)
         logger.info("Read corpus from %s", embeddings_filename)
         read_embeddings(session, task, embeddings_filename)
+        generate_visualization(session, task, embeddings_filename)
 
 
 def tick(session: Session):
