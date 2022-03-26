@@ -13,7 +13,6 @@ from api.database import (
     DatasetPaperModel,
     FilterTaskModel,
     PaperModel,
-    TrainedModel,
     TrainTaskModel,
     UserModel,
     db,
