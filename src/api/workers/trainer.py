@@ -16,7 +16,6 @@ from api.database import (
     DatasetModel,
     DatasetPaperModel,
     NgramModel,
-    PaperModel,
     TrainedModel,
     TrainTaskModel,
     db,
