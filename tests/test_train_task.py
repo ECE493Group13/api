@@ -182,10 +182,10 @@ class TestTrainWorker:
         with NamedTemporaryFile("wb") as file:
             file.write(b"hello world")
             file.flush()
-            trainer.read_embeddings(db.session, task, Path(file.name))
-        db.session.commit()
-        assert task.model is not None
-        assert task.model.data == b"hello world"
+            model = trainer.read_embeddings(task, Path(file.name))
+
+        assert model is not None
+        assert model.data == b"hello world"
 
     def test_generate_visualization(self, dataset: DatasetModel, hparams: dict):
         """
@@ -200,15 +200,34 @@ class TestTrainWorker:
         with NamedTemporaryFile("wb") as file:
             file.write(b"2 1\nhello 0.1\nworld 0.2\n")
             file.flush()
-            trainer.read_embeddings(db.session, task, Path(file.name))
-            trainer.generate_visualization(db.session, task, Path(file.name))
-        db.session.commit()
-        assert task.model is not None
-        assert task.model.visualization is not None
-        visualization = json.loads(task.model.visualization)
+            visualization = trainer.generate_visualization(Path(file.name))
+
+        assert visualization is not None
+        visualization = json.loads(visualization)
         assert isinstance(visualization["labels"], list)
         assert isinstance(visualization["x"], list)
         assert isinstance(visualization["y"], list)
+
+    def test_model_save(self, dataset: DatasetModel, hparams: dict):
+        """
+        Should save model to the db
+        """
+        task = TrainTaskModel(
+            hparams=json.dumps(hparams), user=dataset.task.user, dataset=dataset
+        )
+        db.session.add(task)
+        db.session.commit()
+
+        with NamedTemporaryFile("wb") as file:
+            file.write(b"2 1\nhello 0.1\nworld 0.2\n")
+            file.flush()
+            model = trainer.read_embeddings(task, Path(file.name))
+            visualization = trainer.generate_visualization(Path(file.name))
+            trainer.save_model(db.session, model, visualization)
+
+        assert task.model is not None
+        assert task.model.visualization is not None
+        assert task.model.data is not None
 
     def test_execute(self, dataset: DatasetModel, hparams: dict):
         """
