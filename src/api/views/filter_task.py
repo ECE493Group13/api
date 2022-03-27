@@ -1,15 +1,13 @@
-from datetime import datetime
 from http import HTTPStatus
 from typing import Any
 
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
-from logzero import logger
 from marshmallow import Schema, fields
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
 from api.authentication import auth
-from api.database import DatasetModel, FilterTaskModel, db
+from api.database import FilterTaskModel, db
 
 blueprint = Blueprint("filter-task", "filter-task", url_prefix="/filter-task")
 
@@ -41,29 +39,6 @@ class FilterTask(MethodView):
         task = FilterTaskModel(keywords=" ".join(keywords), user=auth.user)
         db.session.add(task)
         db.session.commit()
-
-        task.start_time = datetime.utcnow()
-
-        dataset = DatasetModel(task=task)
-        db.session.add(dataset)
-        db.session.flush()
-
-        result = db.session.execute(
-            """
-            insert into dataset_paper (dataset_id, dkey)
-                select distinct :dataset_id, dkey from doc_keywords_0
-                where keywords_lc = :keywords
-            """,
-            {"dataset_id": dataset.id, "keywords": " ".join(keywords)},
-        )
-        logger.info(
-            "Filtered papers: inserted %s rows into dataset_paper", result.rowcount
-        )
-
-        task.end_time = datetime.utcnow()
-
-        db.session.commit()
-
         return task
 
     @blueprint.arguments(FilterListSchema, location="query")

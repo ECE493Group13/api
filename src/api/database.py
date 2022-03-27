@@ -144,7 +144,7 @@ class FilterTaskModel(db.Model):
 
     @hybrid_property
     def is_error(self):
-        return self.dataset_id is None
+        return self.dataset_id is None and self.is_complete
 
     @is_error.expression
     def is_error(cls):  # pylint: disable=no-self-argument
@@ -194,6 +194,26 @@ class TrainTaskModel(db.Model):
     model_id = Column(Integer, ForeignKey("trained_model.id"), nullable=True)
     model = relationship("TrainedModel", uselist=False, back_populates="task")
 
+    @hybrid_property
+    def is_complete(self):
+        return self.end_time is not None
+
+    @is_complete.expression
+    def is_complete(cls):  # pylint: disable=no-self-argument
+        return cls.end_time.isnot(None)
+
+    @hybrid_property
+    def is_error(self):
+        return self.model_id is None and self.is_complete
+
+    @is_error.expression
+    def is_error(cls):  # pylint: disable=no-self-argument
+        return cls.model_id.is_(None) & cls.is_complete
+
+    # Hacks to make pylint work
+    is_complete: Column
+    is_error: Column
+
 
 class TrainedModel(db.Model):
     __tablename__ = "trained_model"
@@ -203,3 +223,75 @@ class TrainedModel(db.Model):
     visualization = Column(JSON)
 
     task = relationship("TrainTaskModel", uselist=False, back_populates="model")
+
+
+class AnalogyTestTaskModel(db.Model):
+    __tablename__ = "analogy_test_task"
+
+    id = Column(Integer, primary_key=True)
+    created = Column(DateTime, nullable=False, default=datetime.utcnow)
+    start_time = Column(DateTime, nullable=True)
+    end_time = Column(DateTime, nullable=True)
+
+    domain1_name = Column(Text, nullable=False)
+    domain2_name = Column(Text, nullable=False)
+    domain3_name = Column(Text, nullable=False)
+    domain1_words = Column(Text, nullable=False)
+    domain2_words = Column(Text, nullable=False)
+    domain3_words = Column(Text, nullable=False)
+
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    user = relationship("UserModel", uselist=False)
+
+    model_id = Column(Integer, ForeignKey("trained_model.id"), nullable=False)
+    model = relationship("TrainedModel", uselist=False)
+
+    result_id = Column(Integer, ForeignKey("analogy_test_result.id"), nullable=True)
+    result = relationship("AnalogyTestResultModel", uselist=False)
+
+    @hybrid_property
+    def is_complete(self):
+        return self.end_time is not None
+
+    @is_complete.expression
+    def is_complete(cls):  # pylint: disable=no-self-argument
+        return cls.end_time.isnot(None)
+
+    @hybrid_property
+    def is_error(self):
+        return self.result_id is None and self.is_complete
+
+    @is_error.expression
+    def is_error(cls):  # pylint: disable=no-self-argument
+        return cls.result_id.is_(None) & cls.is_complete
+
+    # Hacks to make pylint work
+    is_complete: Column
+    is_error: Column
+
+
+class AnalogyTestResultModel(db.Model):
+    __tablename__ = "analogy_test_result"
+
+    id = Column(Integer, primary_key=True)
+
+    rows = relationship("AnalogyTestResultRowModel", back_populates="result")
+
+    task = relationship("AnalogyTestTaskModel", uselist=False, back_populates="result")
+
+
+class AnalogyTestResultRowModel(db.Model):
+    __tablename__ = "analogy_test_result_row"
+
+    id = Column(Integer, primary_key=True)
+
+    domain1_name = Column(Text, nullable=False)
+    domain2_name = Column(Text, nullable=False)
+    word_a = Column(Text, nullable=False)
+    word_b = Column(Text, nullable=False)
+    word_c = Column(Text, nullable=False)
+    word_d = Column(Text, nullable=False)
+    analogy_strength = Column(Float, nullable=False)
+
+    result_id = Column(Integer, ForeignKey("analogy_test_result.id"), nullable=False)
+    result = relationship("AnalogyTestResultModel", back_populates="rows")

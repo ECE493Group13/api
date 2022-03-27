@@ -13,6 +13,8 @@ from api.database import (
     UserModel,
     db,
 )
+from api.workers.filterer import FilterWorker
+from api.workers.worker import WorkerRunner
 
 
 @pytest.fixture()
@@ -69,13 +71,19 @@ class TestFilterTask:
             "/filter-task", json={"keywords": ["back pain"]}, headers=auth_headers
         )
         assert response.status_code == HTTPStatus.CREATED
-        assert response.json["is_complete"] is True
-        assert response.json["is_error"] is False
+        assert "is_complete" in response.json
+        assert "is_error" in response.json
+
         task: FilterTaskModel = (
             db.session.query(FilterTaskModel).filter_by(id=response.json["id"]).one()
         )
+        WorkerRunner(FilterWorker())._tick(db.session)  # pylint: disable=W0212
+        db.session.commit()
+
         assert task.keywords == "back pain"
         assert task.dataset is not None
+        assert task.is_complete is True
+        assert task.is_error is False
 
         papers = (
             db.session.query(PaperModel)
