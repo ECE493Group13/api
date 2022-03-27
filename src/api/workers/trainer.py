@@ -37,13 +37,13 @@ def write_corpus(session: Session, dataset: DatasetModel, filename: Path):
             file.write(f"{ngram.ngram_lc}\t{ngram.ngram_count}\n")
 
 
-def read_embeddings(session: Session, task: TrainTaskModel, filename: Path):
+def read_embeddings(task: TrainTaskModel, filename: Path):
     with open(filename, "rb") as file:
         model = TrainedModel(data=file.read(), task=task)
-        session.add(model)
+        return model
 
 
-def generate_visualization(session: Session, task: TrainTaskModel, filename: Path):
+def generate_visualization(filename: Path):
     word_vectors = KeyedVectors.load_word2vec_format(filename, binary=False)
 
     vectors = np.array(word_vectors.vectors)
@@ -58,15 +58,12 @@ def generate_visualization(session: Session, task: TrainTaskModel, filename: Pat
 
     data = {"labels": labels.tolist(), "x": x_points, "y": y_points}
 
-    model: TrainedModel = (
-        session.query(TrainedModel).filter(TrainedModel.task == task).one_or_none()
-    )
+    return json.dumps(data)
 
-    if model is None:
-        print("No trained model found")
-        return
 
-    model.visualization = json.dumps(data)
+def save_model(session: Session, model: TrainedModel, visualization):
+    model.visualization = visualization
+    session.add(model)
     session.commit()
 
 
@@ -81,8 +78,9 @@ def run_task(session: Session, task: TrainTaskModel):
         logger.info("Train with hparams %s", hparams)
         word2vec_wrapper.train(corpus_filename, embeddings_filename, hparams)
         logger.info("Read corpus from %s", embeddings_filename)
-        read_embeddings(session, task, embeddings_filename)
-        generate_visualization(session, task, embeddings_filename)
+        model = read_embeddings(task, embeddings_filename)
+        visualization = generate_visualization(embeddings_filename)
+        save_model(session, model, visualization)
 
 
 class TrainWorker(Worker):

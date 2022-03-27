@@ -205,6 +205,10 @@ class TestTrainWorker:
         db.session.commit()
         assert task.model is not None
         assert task.model.visualization is not None
+        visualization = json.loads(task.model.visualization)
+        assert isinstance(visualization["labels"], list)
+        assert isinstance(visualization["x"], list)
+        assert isinstance(visualization["y"], list)
 
     def test_execute(self, dataset: DatasetModel, hparams: dict):
         """
