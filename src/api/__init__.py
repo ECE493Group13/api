@@ -6,11 +6,13 @@ from api.authentication import auth
 from api.config import DatabaseConfig, MailConfig, OpenAPIConfig
 from api.database import db
 from api.mail import mail
+from api.views.analogy_test_task import blueprint as analogy_test_task_blueprint
 from api.views.auth import blueprint as login_blueprint
 from api.views.filter_task import blueprint as filter_task_blueprint
 from api.views.healthcheck import blueprint as healthcheck_blueprint
 from api.views.register import blueprint as register_blueprint
 from api.views.train_task import blueprint as train_task_blueprint
+from api.views.visualize import blueprint as visualize_blueprint
 
 app = Flask(__name__)
 app.config["API_TITLE"] = "DMS API"
@@ -38,8 +40,10 @@ CORS(app)
 
 api = Api(app)
 
+api.register_blueprint(analogy_test_task_blueprint)
 api.register_blueprint(filter_task_blueprint)
 api.register_blueprint(healthcheck_blueprint)
 api.register_blueprint(login_blueprint)
 api.register_blueprint(register_blueprint)
+api.register_blueprint(visualize_blueprint)
 api.register_blueprint(train_task_blueprint)

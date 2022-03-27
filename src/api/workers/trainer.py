@@ -1,46 +1,27 @@
 import json
-from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from time import sleep
 from typing import TYPE_CHECKING
 
+import numpy as np
 import word2vec_wrapper
 from gensim.models.phrases import Phraser, Phrases
+from gensim.models import KeyedVectors
 from logzero import logger
+from sklearn.manifold import TSNE
 from sqlalchemy.orm.session import Session
 
-from api import app
 from api.database import (
     DatasetModel,
     DatasetPaperModel,
     NgramModel,
     TrainedModel,
     TrainTaskModel,
-    db,
 )
+from api.workers.worker import Worker, WorkerRunner
 
 if TYPE_CHECKING:
     from sqlalchemy.orm.query import Query
-
-
-@contextmanager
-def db_session():
-    with app.app_context():
-        session: Session = db.session
-        yield session
-
-
-def get_next_task(session: Session):
-    task = (
-        session.query(TrainTaskModel)
-        .filter(TrainTaskModel.end_time.is_(None))
-        .order_by(TrainTaskModel.created.asc())
-        .limit(1)
-        .one_or_none()
-    )
-    return task
 
 
 def write_corpus(session: Session, dataset: DatasetModel, filename: Path):
@@ -63,13 +44,34 @@ def write_corpus(session: Session, dataset: DatasetModel, filename: Path):
             file.write(f"{processed_ngram}\t{ngram.ngram_count}\n")
 
 
-def read_embeddings(session: Session, task: TrainTaskModel, filename: Path):
+def read_embeddings(task: TrainTaskModel, filename: Path):
     with open(filename, "rb") as file:
-        model = TrainedModel(
-            data=file.read(),
-            task=task,
-        )
-        session.add(model)
+        model = TrainedModel(data=file.read(), task=task)
+        return model
+
+
+def generate_visualization(filename: Path):
+    word_vectors = KeyedVectors.load_word2vec_format(filename, binary=False)
+
+    vectors = np.array(word_vectors.vectors)
+    labels = np.array(word_vectors.index_to_key)
+
+    tsne = TSNE(n_components=2, random_state=0)
+
+    vectors = tsne.fit_transform(vectors)
+
+    x_points = [np.float64(vector[0]) for vector in vectors]
+    y_points = [np.float64(vector[1]) for vector in vectors]
+
+    data = {"labels": labels.tolist(), "x": x_points, "y": y_points}
+
+    return json.dumps(data)
+
+
+def save_model(session: Session, model: TrainedModel, visualization):
+    model.visualization = visualization
+    session.add(model)
+    session.commit()
 
 
 def run_task(session: Session, task: TrainTaskModel):
@@ -83,36 +85,22 @@ def run_task(session: Session, task: TrainTaskModel):
         logger.info("Train with hparams %s", hparams)
         word2vec_wrapper.train(corpus_filename, embeddings_filename, hparams)
         logger.info("Read corpus from %s", embeddings_filename)
-        read_embeddings(session, task, embeddings_filename)
+        model = read_embeddings(task, embeddings_filename)
+        visualization = generate_visualization(embeddings_filename)
+        save_model(session, model, visualization)
 
 
-def tick(session: Session):
-    next_task = get_next_task(session)
-    if next_task is None:
-        return
+class TrainWorker(Worker):
+    @property
+    def task_model(self):
+        return TrainTaskModel
 
-    next_task.start_time = datetime.utcnow()
-    session.commit()
-    try:
-        run_task(session, next_task)
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        next_task.end_time = datetime.utcnow()
-        session.commit()
+    def execute(self, session: Session, task: TrainTaskModel):
+        run_task(session, task)
 
 
 def main():
-    while True:
-        with db_session() as session:
-            try:
-                tick(session)
-            except Exception:  # pylint: disable=W0703
-                logger.exception("Failed to run tick()")
-
-        sleep(10)
+    WorkerRunner(TrainWorker()).execute()
 
 
 if __name__ == "__main__":
