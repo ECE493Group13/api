@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import word2vec_wrapper
-from gensim.models.phrases import Phraser, Phrases
 from gensim.models import KeyedVectors
+from gensim.models.phrases import Phraser, Phrases
 from logzero import logger
 from sklearn.manifold import TSNE
 from sqlalchemy.orm.session import Session
