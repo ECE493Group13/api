@@ -16,3 +16,7 @@ test:
 setup:
 	python -m venv venv
 	venv/bin/pip install -e .[dev]
+
+.phony: run-trainer
+run-trainer:
+	sudo DB_PASSWORD=$(PASSWORD) venv/bin/python src/api/workers/trainer.py

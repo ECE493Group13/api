@@ -8,7 +8,8 @@ from flask_smorest import abort
 
 from api.database import SessionModel, UserModel, db
 
-SESSION_TIMEOUT = timedelta(hours=1)
+ABSOLUTE_TIMEOUT = timedelta(hours=8)
+REFRESH_TIMEOUT = timedelta(minutes=30)
 
 
 def get_token(request_: Request):
@@ -49,12 +50,16 @@ class Auth:
         )
         if session is None:
             abort(HTTPStatus.UNAUTHORIZED)
-        if (datetime.utcnow() - session.last_refresh) > SESSION_TIMEOUT:
+
+        now = datetime.utcnow()
+        expired_refresh = (now - session.last_refresh) > REFRESH_TIMEOUT
+        expired_absolute = (now - session.created) > ABSOLUTE_TIMEOUT
+        if expired_refresh or expired_absolute:
             db.session.delete(session)
             db.session.commit()
             abort(HTTPStatus.UNAUTHORIZED)
 
-        session.last_refresh = datetime.utcnow()
+        session.last_refresh = now
         g.session = session
 
     def _after_request(self, response: Response):
@@ -76,7 +81,11 @@ class Auth:
 
     def add_session(self, user: UserModel):
         assert "session" not in g
-        assert user.session is None
+        # If we are just logging in, there may be an old session in the db
+        # but not yet in g. Remove it.
+        if user.session is not None:
+            db.session.delete(user.session)
+
         token = secrets.token_hex(nbytes=32)
         session = SessionModel(token=token, user=user)
         db.session.add(session)

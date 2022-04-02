@@ -35,8 +35,8 @@ class PaperModel(db.Model):
     doc_pub_date = Column(DateTime)
     pub_date = Column(DateTime)
     meta_pub_date = Column(DateTime)
-    doc_authors = Column(Text)
-    meta_authors = Column(Text)
+    doc_author = Column(Text)
+    meta_author = Column(Text)
     author = Column(Text)
     doc_title = Column(Text)
     meta_title = Column(Text)
@@ -101,6 +101,7 @@ class SessionModel(db.Model):
     __tablename__ = "session"
 
     token = Column(Text, primary_key=True)
+    created = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_refresh = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
