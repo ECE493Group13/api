@@ -40,53 +40,73 @@ class Word2Vec(tf.keras.Model):
 
     def call(self, pair):
         target, context = pair
-        # target: (batch, dummy?)  # The dummy axis doesn't exist in TF2.7+
-        # context: (batch, context)
         if len(target.shape) == 2:
             target = tf.squeeze(target, axis=1)
-        # target: (batch,)
         word_emb = self.target_embedding(target)
         # word_emb: (batch, embed)
         context_emb = self.context_embedding(context)
         # context_emb: (batch, context, embed)
+
+        # dots = np.zeros((word_emb.shape[0], context_emb.shape[1]))
+        # for b in range(word_emb.shape[0]):
+        #    for c in range(context_emb.shape[1]):
+        #        total = 0
+        #        for e in range(word_emb.shape[1]):
+        #            total += word_emb[b, e] * context_emb[b, c, e]
+        #        dots[b, c] = total
         dots = tf.einsum("be,bce->bc", word_emb, context_emb)
         # dots: (batch, context)
         return dots
 
 
-def read_data(corpus_filename, hparams):
-    data: pd.DataFrame = pd.read_csv(
-        corpus_filename, sep="\t", names=["ngram_lc", "ngram_count"]
-    )
-    data = data.drop(data[data.ngram_count <= hparams["min_count"]].index)
+def process_data(corpus_filename, hparams):
+    # Read in data
+    data = read_data(corpus_filename)
+    # Prepare data
+    sequences, vectorize_layer, num_words = prepare_data(data, hparams)
+    return sequences, vectorize_layer, num_words
 
+
+def read_data(corpus_filename):
+    data: pd.DataFrame = pd.read_csv(
+        corpus_filename,
+        sep="\t",
+        names=["ngram_lc", "ngram_count"],
+        dtype={"ngram_lc": str, "ngram_count": np.int32},
+    )
+    return data
+
+
+def standardizer(input_data):
+    strip_punctuation = r'[!"#$%&()\*\+,-\./:;<=>?@\[\\\]^`{|}~\']'
+    return tf.strings.regex_replace(input_data, strip_punctuation, "")
+
+
+def prepare_data(data, hparams):
+    """This function processes the data by:
+    1. Drop rows that are less than min_count
+    2. Drop nan rows
+    3. Remove stop words
+    4. Duplicate rows by ngram_count
+    5. Vectorize"""
+
+    data = data.drop(data[data.ngram_count <= hparams["min_count"]].index)
+    data = data.dropna()
     data["ngram_lc"] = data["ngram_lc"].apply(
         lambda x: " ".join([word for word in x.split() if word not in stopwords])
     )
-    # Determine number of unique words and scale with ngram_count
-    words = {}
-    for row in data.itertuples():
-        tokens = row.ngram_lc.split(" ")
-        count = row.ngram_count
-        for token in tokens:
-            if token not in words:
-                words[token] = count
-            else:
-                words[token] += count
-    num_words = len(words.keys())
     data: pd.DataFrame = data.loc[data.index.repeat(data.ngram_count)].reset_index(
         drop=True
     )
     data = data.ngram_lc
-    return data, num_words
+    num_words = len(data.str.split().explode().unique())
 
-
-def prepare_data(data, num_words):
     # Convert to tensorflow object
     ngrams_tf = tf.data.Dataset.from_tensor_slices((tf.cast(data.values, tf.string)))
 
     # Create text vectorziation layer
     vectorize_layer = tf.keras.layers.TextVectorization(
+        standardize=standardizer,
         max_tokens=num_words,
         split="whitespace",
         output_mode="int",
@@ -98,65 +118,83 @@ def prepare_data(data, num_words):
         ngrams_tf.batch(1024).prefetch(tf.data.AUTOTUNE).map(vectorize_layer).unbatch()
     )
     sequences = list(text_vector_ds.as_numpy_iterator())
-    return sequences, vectorize_layer
+    return sequences, vectorize_layer, num_words
 
 
-def get_context(context_word, num_words, hparams):
-    """Support function for the function generate_training_data()"""
-    context_class = tf.expand_dims(tf.constant([context_word], dtype="int64"), 1)
-    (negative_sampling_candidates, _, _,) = tf.random.log_uniform_candidate_sampler(
-        true_classes=context_class,
-        num_true=1,
-        num_sampled=hparams["num_neg_samples"],
-        unique=True,
-        range_max=num_words,
-        seed=SEED,
-        name="negative_sampling",
-    )
+def generate_negative_skipgrams(skip_gram, num_words, hparams):
+    """This function generates negative cases for each positive skip gram"""
 
-    # Build context and label vectors (for one target word)
-    negative_sampling_candidates = tf.expand_dims(negative_sampling_candidates, 1)
-
-    context = tf.concat([context_class, negative_sampling_candidates], 0)
-    label = tf.constant([1] + [0] * hparams["num_neg_samples"], dtype="int64")
-    return context, label
-
-
-def generate_training_data(sequences, num_words, hparams):
-    """This function was taken from Tensorflow's Word2Vec tutorial and adapted
-    to fit our use case.
-    https://www.tensorflow.org/tutorials/text/word2vec"""
     targets, contexts, labels = [], [], []
+    for target_word, context_word in skip_gram:
+        context_class = tf.expand_dims(tf.constant([context_word], dtype="int64"), 1)
+        (negative_samples, _, _,) = tf.random.log_uniform_candidate_sampler(
+            true_classes=context_class,
+            num_true=1,
+            num_sampled=hparams["num_neg_samples"],
+            unique=True,
+            range_max=num_words,
+            seed=SEED,
+            name="negative_sampling",
+        )
 
-    # Build the sampling table for `num_words` tokens.
+        # Build context and label vectors (for one target word)
+        negative_samples = tf.expand_dims(negative_samples, 1)
+        negative_samples = np.array(negative_samples).flatten()
+        context_class = np.array(context_class).flatten()
+
+        context = np.concatenate((context_class, negative_samples), axis=0)
+        label = np.array([1] + [0] * hparams["num_neg_samples"], dtype="int64")
+        targets.append(target_word)
+        contexts.append(context)
+        labels.append(label)
+    return targets, contexts, labels
+
+
+def generate_positve_skipgrams(sequences, num_words, hparams):
+    """This function takes loops through the sequences and generates
+    skipgrams for each of the words"""
+
+    skip_grams = []
     sampling_table = tf.keras.preprocessing.sequence.make_sampling_table(
         num_words, sampling_factor=hparams["subsample"]
     )
-
-    # Iterate over all sequences (sentences) in the dataset.
     for sequence in tqdm.tqdm(sequences):
-
-        # Generate positive skip-gram pairs for a sequence (sentence).
-        positive_skip_grams, _ = tf.keras.preprocessing.sequence.skipgrams(
+        # Generate skipgram for each sequence
+        if len(sequence) == 0:
+            continue
+        skip_gram, _ = tf.keras.preprocessing.sequence.skipgrams(
             sequence,
             vocabulary_size=num_words,
             sampling_table=sampling_table,
             window_size=hparams["window_size"],
-            negative_samples=0,
+            negative_samples=hparams["num_neg_samples"],
+        )
+        skip_grams.append(skip_gram)
+    return skip_grams
+
+
+def generate_training_data(sequences, num_words, hparams):
+    """This function iterates through the sequences and generates positive and
+    negative skipgrams and combines them into a tensor dataset"""
+
+    targets, contexts, labels = [], [], []
+
+    # Generate positive skipgrams
+    positive_skip_grams = generate_positve_skipgrams(sequences, num_words, hparams)
+
+    # For each positive skipgram, use the positive to generate a negative skipgram
+    for skip_gram in tqdm.tqdm(positive_skip_grams):
+        target, context, label = generate_negative_skipgrams(
+            skip_gram, num_words, hparams
         )
 
-        # Iterate over each positive skip-gram pair to produce training examples
-        # with a positive context word and negative samples.
-        for target_word, context_word in positive_skip_grams:
-            context, label = get_context(context_word, num_words, hparams)
-
-            # Append each element from the training example to global lists.
-            targets.append(target_word)
-            contexts.append(context)
-            labels.append(label)
+        # Concatenate the results to a list
+        targets = targets + target
+        contexts = contexts + context
+        labels = labels + label
 
     targets = np.array(targets)
-    contexts = np.array(contexts)[:, :, 0]
+    contexts = np.array(contexts)
     labels = np.array(labels)
     training_data = tf.data.Dataset.from_tensor_slices(((targets, contexts), labels))
     training_data = training_data.shuffle(len(training_data)).batch(
@@ -167,8 +205,19 @@ def generate_training_data(sequences, num_words, hparams):
 
 
 def train(corpus_filename, embeddings_filename, hparams):
-    data, num_words = read_data(corpus_filename, hparams)
-    sequences, vectorize_layer = prepare_data(data, num_words)
+    """
+    1. Process Data
+        a. Read data
+        b. Prepare data
+    2. Generate Training data
+        a. Generate positive skipgrams
+        b. Generate negative skipgrams
+    3. Run word2vec on training data
+        a. Create a word2vec model
+        b. fit the data
+    4. Write the word embeddings to a file
+    """
+    sequences, vectorize_layer, num_words = process_data(corpus_filename, hparams)
     training_data = generate_training_data(sequences, num_words, hparams)
     word2vec = Word2Vec(num_words, hparams["embedding_size"], hparams)
 
@@ -199,7 +248,7 @@ def train(corpus_filename, embeddings_filename, hparams):
 #     print("starting")
 #     hparams = {
 #         "embedding_size": 200,
-#         "epochs_to_train": 20,
+#         "epochs_to_train": 15,
 #         "learning_rate": 0.025,
 #         "num_neg_samples": 25,
 #         "batch_size": 500,
@@ -209,4 +258,4 @@ def train(corpus_filename, embeddings_filename, hparams):
 #         "subsample": 1e-3,
 #     }
 
-#     train("test.txt", "embeddings.txt", hparams)
+#     train("test2.txt", "embeddings.txt", hparams)
