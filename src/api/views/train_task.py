@@ -9,6 +9,7 @@ from marshmallow_sqlalchemy import SQLAlchemyAutoSchema
 
 from api.authentication import auth
 from api.database import DatasetModel, FilterTaskModel, TrainTaskModel, db
+from api.schemas import DatasetSchema
 
 blueprint = Blueprint("train-task", "train-task", url_prefix="/train-task")
 
@@ -37,6 +38,12 @@ class TrainListSchema(Schema):
 class TrainTaskSchema(SQLAlchemyAutoSchema):
     class Meta:
         model = TrainTaskModel
+        include_fk = True
+
+    is_complete = fields.Bool()
+    is_error = fields.Bool()
+
+    dataset = fields.Nested(DatasetSchema)
 
 
 @blueprint.route("")
@@ -91,3 +98,20 @@ class TrainTaskById(MethodView):
             abort(HTTPStatus.NOT_FOUND)
 
         return train_task
+
+
+@blueprint.route("/suggest-hparams")
+class SuggestHParams(MethodView):
+    @blueprint.response(HTTPStatus.OK, HyperparameterSchema)
+    def get(self):
+        return {
+            "embedding_size": 200,
+            "epochs_to_train": 15,
+            "learning_rate": 0.025,
+            "num_neg_samples": 25,
+            "batch_size": 500,
+            "concurrent_steps": 12,
+            "window_size": 5,
+            "min_count": 5,
+            "subsample": 1e-3,
+        }

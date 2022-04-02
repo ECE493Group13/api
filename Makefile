@@ -20,3 +20,7 @@ setup:
 .phony: run-trainer
 run-trainer:
 	sudo DB_PASSWORD=$(PASSWORD) venv/bin/python src/api/workers/trainer.py
+
+.phony: run-filterer
+run-filterer:
+	DB_PASSWORD=$(PASSWORD) venv/bin/python src/api/workers/filterer.py

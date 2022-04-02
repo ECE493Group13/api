@@ -2,8 +2,7 @@ import json
 from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
-from tempfile import NamedTemporaryFile
-from unittest.mock import MagicMock
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 import pytest
 from flask.testing import FlaskClient
@@ -18,11 +17,13 @@ from api.database import (
     db,
 )
 from api.workers import trainer
+from api.workers.trainer import TrainWorker
+from api.workers.worker import WorkerRunner
 
 
 @pytest.fixture()
 def dataset(authorized_user: UserModel, papers: list[PaperModel]):
-    dataset_ = DatasetModel()
+    dataset_ = DatasetModel(num_papers=0, name="")
 
     task = FilterTaskModel(
         user=authorized_user,
@@ -64,6 +65,12 @@ def hparams():
     }
 
 
+@pytest.fixture()
+def data_root():
+    with TemporaryDirectory() as tempdir:
+        yield Path(tempdir)
+
+
 class TestTrainTask:
     def test_post(
         self,
@@ -85,6 +92,8 @@ class TestTrainTask:
         assert response.json["created"] is not None
         assert response.json["start_time"] is None
         assert response.json["end_time"] is None
+        assert response.json["is_complete"] is False
+        assert response.json["is_error"] is False
 
         task = (
             db.session.query(TrainTaskModel)
@@ -132,8 +141,28 @@ class TestTrainTask:
         response = client.get(f"/train-task/{train_task.id+1}", headers=auth_headers)
         assert response.status_code == HTTPStatus.NOT_FOUND
 
+    def test_suggest_hparams(self, client: FlaskClient, auth_headers: dict):
+        """
+        Can get suggested hyperparameters for the user to modify
+        """
+        response = client.get("/train-task/suggest-hparams", headers=auth_headers)
+        assert response.status_code == HTTPStatus.OK
+        expected_keys = {
+            "embedding_size",
+            "epochs_to_train",
+            "learning_rate",
+            "num_neg_samples",
+            "batch_size",
+            "concurrent_steps",
+            "window_size",
+            "min_count",
+            "subsample",
+        }
+        assert set(response.json.keys()) == expected_keys
+        assert response.json["embedding_size"] == 200
 
-class TestTrainer:
+
+class TestTrainWorker:
     def test_write_corpus(self, dataset: DatasetModel):
         """
         Ngrams should be written to the corpus file
@@ -146,9 +175,9 @@ class TestTrainer:
                 "incididunt\t7",
             ]
 
-    def test_read_embeddings(self, dataset: DatasetModel, hparams: dict):
+    def test_generate_visualization(self, dataset: DatasetModel, hparams: dict):
         """
-        Should create a new trained model for the embeddings
+        Should generate TSNe raw data for embeddings
         """
         task = TrainTaskModel(
             hparams=json.dumps(hparams), user=dataset.task.user, dataset=dataset
@@ -157,31 +186,19 @@ class TestTrainer:
         db.session.commit()
 
         with NamedTemporaryFile("wb") as file:
-            file.write(b"hello world")
+            file.write(b"2 1\nhello 0.1\nworld 0.2\n")
             file.flush()
-            trainer.read_embeddings(db.session, task, Path(file.name))
-        db.session.commit()
-        assert task.model is not None
-        assert task.model.data == b"hello world"
+            visualization = trainer.generate_visualization(Path(file.name))
 
-    def test_tick(self, dataset: DatasetModel, hparams: dict):
+        assert visualization is not None
+        visualization = json.loads(visualization)
+        assert isinstance(visualization["labels"], list)
+        assert isinstance(visualization["x"], list)
+        assert isinstance(visualization["y"], list)
+
+    def test_model_save(self, dataset: DatasetModel, hparams: dict):
         """
-        Should successfully train, producing a model and marking task as done
-        """
-        task = TrainTaskModel(
-            hparams=json.dumps(hparams), user=dataset.task.user, dataset=dataset
-        )
-        db.session.add(task)
-        db.session.commit()
-
-        trainer.tick(db.session)
-
-        assert task.model is not None
-        assert task.end_time is not None
-
-    def test_tick_failed(self, dataset: DatasetModel, hparams: dict, monkeypatch):
-        """
-        Should mark task as done even if training fails
+        Should save model to the db
         """
         task = TrainTaskModel(
             hparams=json.dumps(hparams), user=dataset.task.user, dataset=dataset
@@ -189,12 +206,29 @@ class TestTrainer:
         db.session.add(task)
         db.session.commit()
 
-        word2vec_wrapper = MagicMock()
-        word2vec_wrapper.train.side_effect = RuntimeError("error")
-        monkeypatch.setattr(trainer, "word2vec_wrapper", word2vec_wrapper)
+        with NamedTemporaryFile("wb") as file:
+            file.write(b"2 1\nhello 0.1\nworld 0.2\n")
+            file.flush()
+            visualization = trainer.generate_visualization(Path(file.name))
+            trainer.save_model(db.session, task, Path(file.name), visualization)
 
-        with pytest.raises(RuntimeError):
-            trainer.tick(db.session)
+            assert task.model is not None
+            assert task.model.visualization is not None
+            assert task.model.embeddings_filename is not None
 
-        assert task.model is None
-        assert task.end_time is not None
+    def test_execute(self, dataset: DatasetModel, hparams: dict, data_root: Path):
+        """
+        Should successfully train, producing a model
+        """
+        task = TrainTaskModel(
+            hparams=json.dumps(hparams), user=dataset.task.user, dataset=dataset
+        )
+        db.session.add(task)
+        db.session.commit()
+
+        WorkerRunner(TrainWorker(data_root))._tick(db.session)  # pylint: disable=W0212
+        db.session.commit()
+
+        assert task.model is not None
+        assert task.is_complete is True
+        assert task.is_error is False

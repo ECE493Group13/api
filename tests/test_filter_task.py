@@ -13,6 +13,8 @@ from api.database import (
     UserModel,
     db,
 )
+from api.workers.filterer import FilterWorker
+from api.workers.worker import WorkerRunner
 
 
 @pytest.fixture()
@@ -41,7 +43,7 @@ def keywords(papers: list[PaperModel]):
 
 @pytest.fixture()
 def filter_tasks(authorized_user: UserModel):
-    dataset = DatasetModel()
+    dataset = DatasetModel(num_papers=0, name="")
     tasks = [
         FilterTaskModel(user=authorized_user, keywords="hello"),
         FilterTaskModel(
@@ -69,13 +71,19 @@ class TestFilterTask:
             "/filter-task", json={"keywords": ["back pain"]}, headers=auth_headers
         )
         assert response.status_code == HTTPStatus.CREATED
-        assert response.json["is_complete"] is True
-        assert response.json["is_error"] is False
+        assert "is_complete" in response.json
+        assert "is_error" in response.json
+
         task: FilterTaskModel = (
             db.session.query(FilterTaskModel).filter_by(id=response.json["id"]).one()
         )
+        WorkerRunner(FilterWorker())._tick(db.session)  # pylint: disable=W0212
+        db.session.commit()
+
         assert task.keywords == "back pain"
         assert task.dataset is not None
+        assert task.is_complete is True
+        assert task.is_error is False
 
         papers = (
             db.session.query(PaperModel)
@@ -110,3 +118,16 @@ class TestFilterTask:
         )
         assert response.status_code == HTTPStatus.OK
         assert len(response.json) == 1
+
+    def test_list_dataset(self, client: FlaskClient, auth_headers: dict, filter_tasks):
+        """
+        Tasks should have a nested "dataset" field with "num_tasks"
+        """
+        response = client.get("/filter-task", headers=auth_headers)
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json) == 3
+
+        assert response.json[0]["dataset"] is None
+        assert response.json[1]["dataset"] is None
+        assert response.json[2]["dataset"] is not None
+        assert response.json[2]["dataset"]["num_papers"] == 0

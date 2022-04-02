@@ -1,16 +1,7 @@
 from datetime import datetime
 
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
-    Float,
-    ForeignKey,
-    Integer,
-    LargeBinary,
-    Text,
-)
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, Text
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 
@@ -143,7 +134,7 @@ class FilterTaskModel(db.Model):
 
     @hybrid_property
     def is_error(self):
-        return self.dataset_id is None
+        return self.dataset_id is None and self.is_complete
 
     @is_error.expression
     def is_error(cls):  # pylint: disable=no-self-argument
@@ -158,6 +149,8 @@ class DatasetModel(db.Model):
     __tablename__ = "dataset"
 
     id = Column(Integer, primary_key=True)
+    name = Column(Text, nullable=False)
+    num_papers = Column(Integer, nullable=False)
 
     task = relationship("FilterTaskModel", uselist=False, back_populates="dataset")
 
@@ -193,11 +186,32 @@ class TrainTaskModel(db.Model):
     model_id = Column(Integer, ForeignKey("trained_model.id"), nullable=True)
     model = relationship("TrainedModel", uselist=False, back_populates="task")
 
+    @hybrid_property
+    def is_complete(self):
+        return self.end_time is not None
+
+    @is_complete.expression
+    def is_complete(cls):  # pylint: disable=no-self-argument
+        return cls.end_time.isnot(None)
+
+    @hybrid_property
+    def is_error(self):
+        return self.model_id is None and self.is_complete
+
+    @is_error.expression
+    def is_error(cls):  # pylint: disable=no-self-argument
+        return cls.model_id.is_(None) & cls.is_complete
+
+    # Hacks to make pylint work
+    is_complete: Column
+    is_error: Column
+
 
 class TrainedModel(db.Model):
     __tablename__ = "trained_model"
 
     id = Column(Integer, primary_key=True)
-    data = Column(LargeBinary, nullable=False)
+    embeddings_filename = Column(Text, nullable=False)
+    visualization = Column(JSON)
 
     task = relationship("TrainTaskModel", uselist=False, back_populates="model")
