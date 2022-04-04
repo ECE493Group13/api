@@ -77,9 +77,9 @@ def read_data(corpus_filename):
     return data
 
 
-def standardizer(input_data):
-    strip_punctuation = r'[!"#$%&()\*\+,-\./:;<=>?@\[\\\]^`{|}~\']'
-    return tf.strings.regex_replace(input_data, strip_punctuation, "")
+def strip_punctuation(input_data):
+    punctuation = r'[!"#$%&()\*\+,-\./:;<=>?@\[\\\]^`{|}~\']'
+    return tf.strings.regex_replace(input_data, punctuation, "")
 
 
 def prepare_data(data, hparams):
@@ -106,7 +106,7 @@ def prepare_data(data, hparams):
 
     # Create text vectorziation layer
     vectorize_layer = tf.keras.layers.TextVectorization(
-        standardize=standardizer,
+        standardize=strip_punctuation,
         max_tokens=num_words,
         split="whitespace",
         output_mode="int",
@@ -115,7 +115,10 @@ def prepare_data(data, hparams):
     vectorize_layer.adapt(ngrams_tf)
 
     text_vector_ds = (
-        ngrams_tf.batch(1024).prefetch(tf.data.AUTOTUNE).map(vectorize_layer).unbatch()
+        ngrams_tf.batch(hparams["batch_size"])
+        .prefetch(tf.data.AUTOTUNE)
+        .map(vectorize_layer)
+        .unbatch()
     )
     sequences = list(text_vector_ds.as_numpy_iterator())
     return sequences, vectorize_layer, num_words
@@ -151,7 +154,7 @@ def generate_negative_skipgrams(skip_gram, num_words, hparams):
 
 
 def generate_positve_skipgrams(sequences, num_words, hparams):
-    """This function takes loops through the sequences and generates
+    """This function loops through the sequences and generates
     skipgrams for each of the words"""
 
     skip_grams = []
@@ -242,20 +245,3 @@ def train(corpus_filename, embeddings_filename, hparams):
                 )
                 continue
             out_kv.write(f"{word} " + " ".join([str(x) for x in weights[index]]) + "\n")
-
-
-# if __name__ == "__main__":
-#     print("starting")
-#     hparams = {
-#         "embedding_size": 200,
-#         "epochs_to_train": 15,
-#         "learning_rate": 0.025,
-#         "num_neg_samples": 25,
-#         "batch_size": 500,
-#         "concurrent_steps": 12,
-#         "window_size": 5,
-#         "min_count": 1,
-#         "subsample": 1e-3,
-#     }
-
-#     train("test2.txt", "embeddings.txt", hparams)
