@@ -90,7 +90,7 @@ def prepare_data(data, hparams):
     4. Duplicate rows by ngram_count
     5. Vectorize"""
 
-    data = data.drop(data[data.ngram_count <= hparams["min_count"]].index)
+    data = data.drop(data[data.ngram_count < hparams["min_count"]].index)
     data = data.dropna()
     data["ngram_lc"] = data["ngram_lc"].apply(
         lambda x: " ".join([word for word in x.split() if word not in stopwords])
@@ -124,32 +124,27 @@ def prepare_data(data, hparams):
     return sequences, vectorize_layer, num_words
 
 
-def generate_negative_skipgrams(skip_gram, num_words, hparams):
+def generate_negative_skipgrams(skip_grams, num_words, hparams):
     """This function generates negative cases for each positive skip gram"""
 
     targets, contexts, labels = [], [], []
-    for target_word, context_word in skip_gram:
-        context_class = tf.expand_dims(tf.constant([context_word], dtype="int64"), 1)
-        (negative_samples, _, _,) = tf.random.log_uniform_candidate_sampler(
-            true_classes=context_class,
-            num_true=1,
-            num_sampled=hparams["num_neg_samples"],
-            unique=True,
-            range_max=num_words,
-            seed=SEED,
-            name="negative_sampling",
-        )
+    label = np.array([1] + [0] * hparams["num_neg_samples"], dtype="int64")
+    for skip_gram in tqdm.tqdm(skip_grams):
+        for target_word, context_word in skip_gram:
+            (negative_samples, _, _,) = tf.random.log_uniform_candidate_sampler(
+                true_classes=np.array([[context_word]]),
+                num_true=1,
+                num_sampled=hparams["num_neg_samples"],
+                unique=True,
+                range_max=num_words,
+                seed=SEED,
+                name="negative_sampling",
+            )
 
-        # Build context and label vectors (for one target word)
-        negative_samples = tf.expand_dims(negative_samples, 1)
-        negative_samples = np.array(negative_samples).flatten()
-        context_class = np.array(context_class).flatten()
-
-        context = np.concatenate((context_class, negative_samples), axis=0)
-        label = np.array([1] + [0] * hparams["num_neg_samples"], dtype="int64")
-        targets.append(target_word)
-        contexts.append(context)
-        labels.append(label)
+            context = np.concatenate(([context_word], negative_samples), axis=0)
+            targets.append(target_word)
+            contexts.append(context)
+            labels.append(label)
     return targets, contexts, labels
 
 
@@ -185,16 +180,10 @@ def generate_training_data(sequences, num_words, hparams):
     # Generate positive skipgrams
     positive_skip_grams = generate_positve_skipgrams(sequences, num_words, hparams)
 
-    # For each positive skipgram, use the positive to generate a negative skipgram
-    for skip_gram in tqdm.tqdm(positive_skip_grams):
-        target, context, label = generate_negative_skipgrams(
-            skip_gram, num_words, hparams
-        )
-
-        # Concatenate the results to a list
-        targets = targets + target
-        contexts = contexts + context
-        labels = labels + label
+    # use the positive skipgrams to generate a negative skipgram
+    targets, contexts, labels = generate_negative_skipgrams(
+        positive_skip_grams, num_words, hparams
+    )
 
     targets = np.array(targets)
     contexts = np.array(contexts)
