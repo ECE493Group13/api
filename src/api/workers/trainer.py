@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import numpy as np
-import word2vec_wrapper
 from gensim.models import KeyedVectors
 from gensim.models.phrases import Phraser, Phrases
 from logzero import logger
@@ -24,6 +23,7 @@ from api.database import (
     TrainedModel,
     TrainTaskModel,
 )
+from api.word2vec import word2vec
 from api.workers.worker import Worker, WorkerRunner
 
 if TYPE_CHECKING:
@@ -99,7 +99,7 @@ def run_task(session: Session, task: TrainTaskModel, data_root: Path):
             hparams,
             embeddings_filename,
         )
-        word2vec_wrapper.train(corpus_filename, embeddings_filename, hparams)
+        word2vec.train(corpus_filename, embeddings_filename, hparams)
         logger.info("Generate visualization from %s", embeddings_filename)
         visualization = generate_visualization(embeddings_filename)
         save_model(session, task, embeddings_filename, visualization)
